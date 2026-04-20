@@ -1,0 +1,27 @@
+[project]
+name = "pii-filter-mcp"
+version = "0.1.0"
+description = "MCP server exposing a PII filter tool"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "en-core-web-lg",
+    "mcp>=1.9.4",
+    "presidio-analyzer>=2.2.360",
+]
+
+[project.scripts]
+pii-filter-mcp = "main:main"
+
+[tool.uv.sources]
+en-core-web-lg = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl" }
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main", "filters"]
