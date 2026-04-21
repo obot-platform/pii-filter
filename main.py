@@ -75,29 +75,10 @@ def _filter_message(message: MCPMessage, confidence_threshold: float) -> dict[st
     }
 
 
-def _coerce_message(message: MCPMessage | dict[str, Any]) -> MCPMessage:
+def _coerce_message(message: MCPMessage | dict[str, Any] | None) -> MCPMessage:
     if isinstance(message, MCPMessage):
         return message
     return MCPMessage.model_validate(message)
-
-
-def _filter_payload(payload: Any, confidence_threshold: float) -> dict[str, Any]:
-    redaction = pii_filter.redact_payload(payload, confidence_threshold)
-
-    return {
-        "accept": True,
-        "accepted": True,
-        "message": None,
-        "reason": "Sensitive PII was detected and redacted from the payload."
-        if redaction["modified"]
-        else "",
-        "payload": redaction["redacted_payload"],
-        "entities": redaction["entities"],
-        "sensitive_entities": redaction["sensitive_entities"],
-        "entity_count": len(redaction["entities"]),
-        "sensitive_entity_count": len(redaction["sensitive_entities"]),
-        "confidence_threshold": confidence_threshold,
-    }
 
 
 @server.tool(
@@ -105,21 +86,11 @@ def _filter_payload(payload: Any, confidence_threshold: float) -> dict[str, Any]
     description="Nanobot-compatible MCP hook that detects PII and can return a redacted message when content is not accepted as-is.",
 )
 def filter_pii(
-    accept: bool = True,
     message: MCPMessage | dict[str, Any] | None = None,
-    reason: str = "",
-    payload: Any | None = None,
     confidence_threshold: float = 0.8,
 ) -> dict[str, Any]:
-    _ = accept
-    _ = reason
-
-    if message is not None:
-        print("Filtering message with confidence threshold:", confidence_threshold)
-        return _filter_message(_coerce_message(message), confidence_threshold)
-
-    print("Filtering payload with confidence threshold:", confidence_threshold)
-    return _filter_payload(payload, confidence_threshold)
+    print("Filtering message with confidence threshold:", confidence_threshold)
+    return _filter_message(_coerce_message(message), confidence_threshold)
 
 
 def main() -> None:
