@@ -64,7 +64,7 @@ def _filter_message(message: MCPMessage, confidence_threshold: float) -> dict[st
 
     return {
         "accept": True,
-        "accepted": True,
+        "mutated": modified,
         "message": redacted_message,
         "reason": reason,
         "entities": entities,

@@ -6,7 +6,8 @@ This project converts the original HTTP webhook server into an MCP server with o
 
 The `filter_pii` tool analyzes a Nanobot-style hook payload or any JSON-compatible payload with Microsoft Presidio and returns:
 
-- `accept` and `accepted` flags
+- an `accept` flag
+- a `mutated` boolean indicating whether any content was rewritten
 - a `message` object when filtering a Nanobot hook
 - a redacted payload or message when sensitive PII is found
 - all detected entities
@@ -74,7 +75,7 @@ Nanobot hook-style example:
 }
 ```
 
-When sensitive PII is found, the tool returns `accept: false` and `accepted: false` plus a redacted `message` so callers can continue with the rewritten payload instead of failing outright.
+When sensitive PII is found, the tool returns a redacted `message` and `redacted: true` so callers can continue with the rewritten payload instead of failing outright.
 
 Example payload:
 
