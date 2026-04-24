@@ -75,7 +75,7 @@ def _filter_message(message: MCPMessage, confidence_threshold: float) -> dict[st
     }
 
 
-def _coerce_message(message: MCPMessage | dict[str, Any] | None) -> MCPMessage:
+def _coerce_message(message: MCPMessage | dict[str, Any]) -> MCPMessage:
     if isinstance(message, MCPMessage):
         return message
     return MCPMessage.model_validate(message)
@@ -83,10 +83,11 @@ def _coerce_message(message: MCPMessage | dict[str, Any] | None) -> MCPMessage:
 
 @server.tool(
     name="filter_pii",
-    description="Nanobot-compatible MCP hook that detects PII and can return a redacted message when content is not accepted as-is.",
+    title="PII Filter",
+    description="Obot-compatible MCP hook that detects PII and can return a redacted message when content is not accepted as-is.",
 )
 def filter_pii(
-    message: MCPMessage | dict[str, Any] | None = None,
+    message: MCPMessage | dict[str, Any],
     confidence_threshold: float = 0.8,
 ) -> dict[str, Any]:
     print("Filtering message with confidence threshold:", confidence_threshold)
