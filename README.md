@@ -9,9 +9,8 @@ The `filter_pii` tool analyzes a Nanobot-style hook payload or any JSON-compatib
 - an `accept` flag
 - a `mutated` boolean indicating whether any content was rewritten
 - a `message` object when filtering a Nanobot hook
-- a redacted payload or message when sensitive PII is found
-- all detected entities
-- the subset of high-confidence sensitive entities
+- a redacted payload or message when redactable PII is found and no blocked PII is found
+- a human-friendly `reason`
 
 Sensitive entity types match the original server:
 
@@ -45,12 +44,25 @@ This starts the MCP server as a streamable HTTP server on `http://0.0.0.0:8080/m
 
 You can override the bind address with `HOST` and `PORT`.
 
-You can limit which sensitive entity types are filtered with `PII_FILTER_TYPES` as a comma-separated list. If `PII_FILTER_TYPES` is unset or blank, all supported sensitive entity types are enabled.
+You can configure blocked and redacted entity types separately:
+
+- `PII_BLOCK_TYPES`: comma-separated entity types that should be treated as blocking
+- `PII_REDACT_TYPES`: comma-separated entity types that should be redacted
+
+Each configured type can optionally include a confidence threshold override using `TYPE=THRESHOLD`. Types without an explicit threshold are stored without an override and use the default `0.8` threshold.
+
+If either value is unset or blank, no entity types are enabled for that behavior.
 
 Example:
 
 ```bash
-PII_FILTER_TYPES=EMAIL_ADDRESS,PHONE_NUMBER uv run pii-filter-mcp
+PII_BLOCK_TYPES=US_SSN,CREDIT_CARD PII_REDACT_TYPES=EMAIL_ADDRESS,PHONE_NUMBER uv run pii-filter-mcp
+```
+
+Per-type thresholds example:
+
+```bash
+PII_REDACT_TYPES=EMAIL_ADDRESS=0.8,PHONE_NUMBER=0.4 uv run pii-filter-mcp
 ```
 
 It is open on whatever interface or service name routes to that port, including private Docker IPs and Kubernetes service DNS names.
@@ -65,7 +77,7 @@ Inputs:
 - `message`: optional Nanobot JSON-RPC message
 - `reason`: optional hook reason string
 - `payload`: optional standalone JSON-compatible value
-- `confidence_threshold`: optional float, default `0.8`
+- confidence thresholds are configured through `PII_BLOCK_TYPES` and `PII_REDACT_TYPES`, with a default of `0.8`
 
 Nanobot hook-style example:
 
@@ -83,7 +95,9 @@ Nanobot hook-style example:
 }
 ```
 
-When sensitive PII is found, the tool returns a redacted `message` and `redacted: true` so callers can continue with the rewritten payload instead of failing outright.
+When blocked PII is found, the tool returns only `accept: false` and a human-friendly `reason` describing which blocked entity types were detected.
+
+When only redactable PII is found, the tool returns a redacted `message`, `mutated: true`, and a human-friendly `reason` describing which entity types were redacted.
 
 Example payload:
 

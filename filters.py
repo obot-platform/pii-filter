@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 from typing import Any, Dict, List, Tuple
 
 from presidio_analyzer import AnalyzerEngine
@@ -8,60 +7,69 @@ from presidio_analyzer import AnalyzerEngine
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_SENSITIVE_ENTITY_TYPES = {
-    "EMAIL_ADDRESS",
-    "PHONE_NUMBER",
-    "CREDIT_CARD",
-    "CRYPTO",
-    "IBAN_CODE",
-    "IP_ADDRESS",
-    "US_SSN",
-    "US_BANK_NUMBER",
-    "US_PASSPORT",
-    "MEDICAL_LICENSE",
-    "US_DRIVER_LICENSE",
-}
+def configured_entity_types(
+    configured_types: dict[str, float | None], allowed_entity_types: set[str]
+) -> dict[str, float | None]:
+    entity_types = set(configured_types)
 
-
-def configured_sensitive_entity_types() -> set[str]:
-    configured_types = os.getenv("PII_FILTER_TYPES", "")
-    if not configured_types.strip():
-        return DEFAULT_SENSITIVE_ENTITY_TYPES
-
-    entity_types = {
-        entity_type.strip().upper()
-        for entity_type in configured_types.split(",")
-        if entity_type.strip()
-    }
-    unknown_entity_types = entity_types - DEFAULT_SENSITIVE_ENTITY_TYPES
+    unknown_entity_types = entity_types - allowed_entity_types
     if unknown_entity_types:
         logger.warning(
-            "Unknown PII_FILTER_TYPES values: "
+            f"Unknown values: "
             f"{', '.join(sorted(unknown_entity_types))}. "
             "Ignoring unknown values. Allowed values: "
-            f"{', '.join(sorted(DEFAULT_SENSITIVE_ENTITY_TYPES))}"
+            f"{', '.join(sorted(allowed_entity_types))}"
         )
 
-    return entity_types & DEFAULT_SENSITIVE_ENTITY_TYPES
+    return {
+        entity_type: configured_types[entity_type]
+        for entity_type in entity_types & allowed_entity_types
+    }
 
 
 class PIIFilter:
     """Filter to detect and reject PII using Microsoft Presidio."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        blocked_thresholds: dict[str, float | None] | None = None,
+        redacted_thresholds: dict[str, float | None] | None = None,
+    ) -> None:
         self.analyzer = AnalyzerEngine()
-        self.sensitive_entity_types = configured_sensitive_entity_types()
+        self.supported_entity_types = set(
+            self.analyzer.get_supported_entities(language="en")
+        )
+        self.blocked_types = configured_entity_types(
+            blocked_thresholds or {}, self.supported_entity_types
+        )
+        self.redacted_types = configured_entity_types(
+            redacted_thresholds or {}, self.supported_entity_types
+        )
+        self.blocked_entity_types = set(self.blocked_types)
+        self.redacted_entity_types = set(self.redacted_types)
+        self.analyzed_entity_types = (
+            self.blocked_entity_types | self.redacted_entity_types
+        )
         logger.info(
-            "PII filter initialized with Presidio analyzer for entity types: %s",
-            sorted(self.sensitive_entity_types),
+            "PII filter initialized with %s supported types, block types: %s, redact types: %s",
+            len(self.supported_entity_types),
+            sorted(self.blocked_entity_types),
+            sorted(self.redacted_entity_types),
         )
 
-    def analyze_text(self, text: str) -> List[Dict[str, Any]]:
+    def analyze_text(
+        self, text: str, entity_types: set[str] | None = None
+    ) -> List[Dict[str, Any]]:
         """Analyze text for PII entities."""
+        if entity_types is None:
+            entity_types = self.analyzed_entity_types
+        if not entity_types:
+            return []
+
         results = self.analyzer.analyze(
             text=text,
             language="en",
-            entities=list(self.sensitive_entity_types),
+            entities=list(entity_types),
         )
         return [
             {
@@ -69,7 +77,7 @@ class PIIFilter:
                 "start": result.start,
                 "end": result.end,
                 "confidence": result.score,
-                "text": text[result.start:result.end],
+                "text": text[result.start : result.end],
             }
             for result in results
         ]
@@ -96,28 +104,46 @@ class PIIFilter:
         }
 
     def sensitive_entities(
-        self, entities: List[Dict[str, Any]], confidence_threshold: float = 0.8
+        self,
+        entities: List[Dict[str, Any]],
+        entity_types: set[str],
+        confidence_threshold: float = 0.8,
+        entity_thresholds: Dict[str, float | None] | None = None,
     ) -> List[Dict[str, Any]]:
         return [
             entity
             for entity in entities
-            if entity["confidence"] >= confidence_threshold
-            and entity["entity_type"] in self.sensitive_entity_types
+            if entity["entity_type"] in entity_types
+            and entity["confidence"]
+            >= (
+                entity_thresholds.get(entity["entity_type"]) or confidence_threshold
+                if entity_thresholds is not None
+                else confidence_threshold
+            )
         ]
 
     def redact_text(
         self, text: str, confidence_threshold: float = 0.8
     ) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, Any]]]:
         entities = self.analyze_text(text)
-        sensitive_entities = self.sensitive_entities(entities, confidence_threshold)
+        sensitive_entities = self.sensitive_entities(
+            entities,
+            self.redacted_entity_types,
+            confidence_threshold,
+            self.redacted_types,
+        )
 
         if not sensitive_entities:
             return text, entities, []
 
         redacted = text
-        for entity in sorted(sensitive_entities, key=lambda item: item["start"], reverse=True):
+        for entity in sorted(
+            sensitive_entities, key=lambda item: item["start"], reverse=True
+        ):
             replacement = f"[REDACTED_{entity['entity_type']}]"
-            redacted = redacted[: entity["start"]] + replacement + redacted[entity["end"] :]
+            redacted = (
+                redacted[: entity["start"]] + replacement + redacted[entity["end"] :]
+            )
 
         return redacted, entities, sensitive_entities
 
@@ -151,29 +177,3 @@ class PIIFilter:
             "sensitive_entities": all_sensitive_entities,
             "modified": redacted_payload != payload,
         }
-
-    def should_reject(self, payload: Any, confidence_threshold: float = 0.8) -> bool:
-        """Determine if a payload should be rejected due to sensitive PII."""
-        analysis = self.analyze_payload(payload)
-
-        if not analysis["has_pii"]:
-            return False
-
-        high_confidence_sensitive_entities = self.sensitive_entities(
-            analysis["entities"], confidence_threshold
-        )
-
-        should_reject = len(high_confidence_sensitive_entities) > 0
-
-        if should_reject:
-            rejected_types = {e["entity_type"] for e in high_confidence_sensitive_entities}
-            logger.warning(
-                "Rejecting payload due to %s sensitive PII entities: %s",
-                len(high_confidence_sensitive_entities),
-                rejected_types,
-            )
-
-        return should_reject
-
-
-pii_filter = PIIFilter()
