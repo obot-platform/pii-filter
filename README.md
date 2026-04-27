@@ -45,6 +45,14 @@ This starts the MCP server as a streamable HTTP server on `http://0.0.0.0:8080/m
 
 You can override the bind address with `HOST` and `PORT`.
 
+You can limit which sensitive entity types are filtered with `PII_FILTER_TYPES` as a comma-separated list. If `PII_FILTER_TYPES` is unset or blank, all supported sensitive entity types are enabled.
+
+Example:
+
+```bash
+PII_FILTER_TYPES=EMAIL_ADDRESS,PHONE_NUMBER uv run pii-filter-mcp
+```
+
 It is open on whatever interface or service name routes to that port, including private Docker IPs and Kubernetes service DNS names.
 
 ## Tool
