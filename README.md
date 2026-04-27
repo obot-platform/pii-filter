@@ -49,7 +49,12 @@ You can configure blocked and redacted entity types separately:
 - `PII_BLOCK_TYPES`: comma-separated entity types that should be treated as blocking
 - `PII_REDACT_TYPES`: comma-separated entity types that should be redacted
 
-Each configured type can optionally include a confidence threshold override using `TYPE=THRESHOLD`. Types without an explicit threshold are stored without an override and use the default `0.8` threshold.
+`main.py` constructs the `PIIFilter` from those environment variables at startup.
+
+Each configured type can optionally include a confidence threshold override using `TYPE=THRESHOLD`.
+
+- `EMAIL_ADDRESS` means `{"EMAIL_ADDRESS": null}` and uses the default `0.8` threshold
+- `PHONE_NUMBER=0.4` means `{"PHONE_NUMBER": 0.4}`
 
 If either value is unset or blank, no entity types are enabled for that behavior.
 
@@ -73,11 +78,9 @@ It is open on whatever interface or service name routes to that port, including 
 
 Inputs:
 
-- `accept`: optional boolean input flag from Nanobot hooks
-- `message`: optional Nanobot JSON-RPC message
-- `reason`: optional hook reason string
-- `payload`: optional standalone JSON-compatible value
-- confidence thresholds are configured through `PII_BLOCK_TYPES` and `PII_REDACT_TYPES`, with a default of `0.8`
+- `message`: Nanobot JSON-RPC message to inspect and optionally redact
+
+Thresholds are configured through `PII_BLOCK_TYPES` and `PII_REDACT_TYPES`. If a type has no explicit threshold, the default `0.8` threshold is used.
 
 Nanobot hook-style example:
 
