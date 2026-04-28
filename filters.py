@@ -6,6 +6,25 @@ from presidio_analyzer import AnalyzerEngine
 
 logger = logging.getLogger(__name__)
 
+FALLBACK_CONFIDENCE_THRESHOLD = 0.6
+DEFAULT_CONFIDENCE_THRESHOLDS = {
+    "EMAIL_ADDRESS": 0.8,
+    "PHONE_NUMBER": 0.6,
+    "CREDIT_CARD": 0.8,
+    "CRYPTO": 0.8,
+    "IBAN_CODE": 0.8,
+    "IP_ADDRESS": 0.6,
+    "US_SSN": 0.5,
+    "US_BANK_NUMBER": 0.4,
+    "US_PASSPORT": 0.45,
+    "US_DRIVER_LICENSE": 0.6,
+    "MEDICAL_LICENSE": 0.6,
+}
+
+
+def default_confidence_threshold(entity_type: str) -> float:
+    return DEFAULT_CONFIDENCE_THRESHOLDS.get(entity_type, FALLBACK_CONFIDENCE_THRESHOLD)
+
 
 def configured_entity_types(
     configured_types: dict[str, float | None], allowed_entity_types: set[str]
@@ -107,7 +126,6 @@ class PIIFilter:
         self,
         entities: List[Dict[str, Any]],
         entity_types: set[str],
-        confidence_threshold: float = 0.8,
         entity_thresholds: Dict[str, float | None] | None = None,
     ) -> List[Dict[str, Any]]:
         return [
@@ -115,21 +133,29 @@ class PIIFilter:
             for entity in entities
             if entity["entity_type"] in entity_types
             and entity["confidence"]
-            >= (
-                entity_thresholds.get(entity["entity_type"]) or confidence_threshold
-                if entity_thresholds is not None
-                else confidence_threshold
-            )
+            >= self._confidence_threshold(entity["entity_type"], entity_thresholds)
         ]
 
+    def _confidence_threshold(
+        self,
+        entity_type: str,
+        entity_thresholds: Dict[str, float | None] | None = None,
+    ) -> float:
+        configured_threshold = (
+            entity_thresholds.get(entity_type) if entity_thresholds is not None else None
+        )
+        if configured_threshold is not None:
+            return configured_threshold
+
+        return default_confidence_threshold(entity_type)
+
     def redact_text(
-        self, text: str, confidence_threshold: float = 0.8
+        self, text: str
     ) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, Any]]]:
         entities = self.analyze_text(text)
         sensitive_entities = self.sensitive_entities(
             entities,
             self.redacted_entity_types,
-            confidence_threshold,
             self.redacted_types,
         )
 
@@ -147,17 +173,13 @@ class PIIFilter:
 
         return redacted, entities, sensitive_entities
 
-    def redact_payload(
-        self, payload: Any, confidence_threshold: float = 0.8
-    ) -> Dict[str, Any]:
+    def redact_payload(self, payload: Any) -> Dict[str, Any]:
         all_entities: List[Dict[str, Any]] = []
         all_sensitive_entities: List[Dict[str, Any]] = []
 
         def walk(value: Any) -> Any:
             if isinstance(value, str):
-                redacted, entities, sensitive_entities = self.redact_text(
-                    value, confidence_threshold
-                )
+                redacted, entities, sensitive_entities = self.redact_text(value)
                 all_entities.extend(entities)
                 all_sensitive_entities.extend(sensitive_entities)
                 return redacted

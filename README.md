@@ -53,7 +53,7 @@ You can configure blocked and redacted entity types separately:
 
 Each configured type can optionally include a confidence threshold override using `TYPE=THRESHOLD`.
 
-- `EMAIL_ADDRESS` means `{"EMAIL_ADDRESS": null}` and uses the default `0.8` threshold
+- `EMAIL_ADDRESS` means `{"EMAIL_ADDRESS": null}` and uses the default `0.8` threshold for email addresses
 - `PHONE_NUMBER=0.4` means `{"PHONE_NUMBER": 0.4}`
 
 If either value is unset or blank, no entity types are enabled for that behavior.
@@ -80,7 +80,7 @@ Inputs:
 
 - `message`: Nanobot JSON-RPC message to inspect and optionally redact
 
-Thresholds are configured through `PII_BLOCK_TYPES` and `PII_REDACT_TYPES`. If a type has no explicit threshold, the default `0.8` threshold is used.
+Thresholds are configured through `PII_BLOCK_TYPES` and `PII_REDACT_TYPES`. If a type has no explicit threshold, its per-type default is used. `EMAIL_ADDRESS` defaults to `0.8`, `PHONE_NUMBER` defaults to `0.4`, and any type without a specific default uses `0.6`.
 
 Nanobot hook-style example:
 
