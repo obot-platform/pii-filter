@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "en-core-web-lg",
-    "mcp>=1.9.4",
+    "mcp>=1.28.1,<2",
     "presidio-analyzer>=2.2.360",
 ]
 
